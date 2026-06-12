@@ -6,6 +6,7 @@ import lombok.Data;
 @AllArgsConstructor
 @Data
 public class ProductDTO {
-  private String id;
+  // DB piece id, not a Stripe product id
+  private Long id;
   private Long quantity;
 }

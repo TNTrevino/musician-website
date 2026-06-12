@@ -4,15 +4,15 @@ import com.project.backend.DTOs.PaymentRequestDTO;
 import com.project.backend.DTOs.PaymentResponseDTO;
 import com.project.backend.DTOs.PaymentStatusResponseDTO;
 import com.project.backend.DTOs.SessionDTO;
+import com.project.backend.models.Piece;
 import com.project.backend.repositories.PiecesRepository;
 import com.stripe.Stripe;
 import com.stripe.exception.StripeException;
-import com.stripe.model.Price;
-import com.stripe.model.Product;
 import com.stripe.model.checkout.Session;
 import com.stripe.param.checkout.SessionCreateParams;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -29,44 +29,49 @@ public class PaymentService {
   @Value("${FRONTEND_URL}")
   private String baseUrl;
 
+  // Stripe metadata values are capped at 500 characters
+  private static final int MAX_CART_PIECES = 50;
+
   @Autowired PiecesRepository piecesRepository;
 
   public PaymentResponseDTO checkoutProducts(PaymentRequestDTO paymentRequest) {
     logger.info("Initiating payment checkout for {} products", paymentRequest.getProducts().size());
     Stripe.apiKey = stripeSecret;
 
+    if (paymentRequest.getProducts().size() > MAX_CART_PIECES) {
+      logger.warn("Checkout rejected: cart has {} pieces", paymentRequest.getProducts().size());
+      return PaymentResponseDTO.builder()
+          .status("FAILED")
+          .message("Too many pieces in cart")
+          .build();
+    }
+
     List<SessionCreateParams.LineItem> lineItems = new ArrayList<>();
+    List<Long> pieceIds = new ArrayList<>();
 
     paymentRequest.getProducts().stream()
         .forEach(
             dto -> {
-              Product product;
-              try {
-                logger.debug("Looking for product with id: {}", dto.getId());
-                product = Product.retrieve(dto.getId());
-              } catch (StripeException ex) {
-                logger.error("Failed to retrieve product {}: {}", dto.getId(), ex.getMessage());
-                throw new RuntimeException("Failed to get product");
-              }
+              logger.debug("Looking for piece with id: {}", dto.getId());
+              Piece piece =
+                  piecesRepository
+                      .findById(dto.getId())
+                      .orElseThrow(() -> new RuntimeException("Piece not found: " + dto.getId()));
 
-              Price price;
-              try {
-                logger.debug("Retrieving price for product: {}", product.getId());
-                price = Price.retrieve(product.getDefaultPrice());
-              } catch (StripeException ex) {
-                logger.error("Failed to retrieve price for product {}: {}", product.getId(), ex.getMessage());
-                throw new RuntimeException("Failed to get price");
+              if (piece.getFileName() == null || piece.getFileName().isBlank()) {
+                logger.error("Piece {} has no file and cannot be sold", piece.getId());
+                throw new RuntimeException("Piece is not available for purchase");
               }
 
               SessionCreateParams.LineItem.PriceData.ProductData productData =
                   SessionCreateParams.LineItem.PriceData.ProductData.builder()
-                      .setName(product.getName())
+                      .setName(piece.getTitle())
                       .build();
 
               SessionCreateParams.LineItem.PriceData priceData =
                   SessionCreateParams.LineItem.PriceData.builder()
-                      .setCurrency(price.getCurrency()) // FIX: right now will always be USD
-                      .setUnitAmount(price.getUnitAmount())
+                      .setCurrency("usd")
+                      .setUnitAmount(Math.round(piece.getPrice() * 100))
                       .setProductData(productData)
                       .build();
 
@@ -77,14 +82,20 @@ public class PaymentService {
                       .build();
 
               lineItems.add(lineItem);
+              pieceIds.add(piece.getId());
             });
 
     SessionCreateParams params =
         SessionCreateParams.builder()
             .setMode(SessionCreateParams.Mode.PAYMENT)
-            .setSuccessUrl(baseUrl + "/success")
+            // Stripe substitutes the literal {CHECKOUT_SESSION_ID} placeholder
+            .setSuccessUrl(baseUrl + "/success?session_id={CHECKOUT_SESSION_ID}")
             .setCancelUrl(baseUrl + "/cancel")
             .addAllLineItem(lineItems)
+            // fulfillment maps line items back to DB pieces through this, never by name
+            .putMetadata(
+                "piece_ids",
+                pieceIds.stream().map(String::valueOf).collect(Collectors.joining(",")))
             .build();
 
     Session session = null;
