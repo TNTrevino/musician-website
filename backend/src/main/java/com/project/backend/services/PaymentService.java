@@ -1,9 +1,11 @@
 package com.project.backend.services;
 
+import com.project.backend.DTOs.DownloadItemDTO;
+import com.project.backend.DTOs.OrderConfirmationDTO;
 import com.project.backend.DTOs.PaymentRequestDTO;
 import com.project.backend.DTOs.PaymentResponseDTO;
-import com.project.backend.DTOs.PaymentStatusResponseDTO;
-import com.project.backend.DTOs.SessionDTO;
+import com.project.backend.models.Order;
+import com.project.backend.models.OrderItem;
 import com.project.backend.models.Piece;
 import com.project.backend.repositories.PiecesRepository;
 import com.stripe.Stripe;
@@ -33,6 +35,7 @@ public class PaymentService {
   private static final int MAX_CART_PIECES = 50;
 
   @Autowired PiecesRepository piecesRepository;
+  @Autowired OrderFulfillmentService fulfillmentService;
 
   public PaymentResponseDTO checkoutProducts(PaymentRequestDTO paymentRequest) {
     logger.info("Initiating payment checkout for {} products", paymentRequest.getProducts().size());
@@ -119,25 +122,39 @@ public class PaymentService {
         .build();
   }
 
-  public PaymentStatusResponseDTO checkSessionStatus(SessionDTO dto) {
+  /**
+   * Called by the success page. Fulfills lazily through the same idempotent path as the webhook,
+   * so the buyer gets their downloads even if the webhook hasn't arrived yet.
+   */
+  public OrderConfirmationDTO confirmSession(String sessionId) {
     Stripe.apiKey = stripeSecret;
 
-    logger.info("Looking for session: {}", dto.getSessionId());
+    logger.info("Confirming session: {}", sessionId);
+    Session session;
     try {
-      Session session = Session.retrieve(dto.getSessionId());
-
-      if (!session.getStatus().equals("complete")) {
-        return new PaymentStatusResponseDTO(
-            "PENDING", "Payment is still processing", dto.getSessionId());
-      }
-
-      return new PaymentStatusResponseDTO(
-          "SUCCESS", "Payment completed successfully", session.getId());
-
-    } catch (StripeException e) {
-      logger.error("Stripe error checking session status: {}", e.getMessage());
-      return new PaymentStatusResponseDTO(
-          "ERROR", "Failed to retrieve payment info", "invalid session");
+      session = Session.retrieve(sessionId);
+    } catch (StripeException ex) {
+      logger.error("Stripe error confirming session {}: {}", sessionId, ex.getMessage());
+      return OrderConfirmationDTO.builder().status("ERROR").build();
     }
+
+    if (!"paid".equals(session.getPaymentStatus())) {
+      return OrderConfirmationDTO.builder().status("PENDING").build();
+    }
+
+    Order order = fulfillmentService.fulfill(session);
+
+    List<DownloadItemDTO> items =
+        order.getItems().stream()
+            .map(OrderItem::getPiece)
+            .map(piece -> new DownloadItemDTO(piece.getId(), piece.getTitle(), piece.getComposer()))
+            .toList();
+
+    return OrderConfirmationDTO.builder()
+        .status("SUCCESS")
+        .buyerEmail(order.getBuyerEmail())
+        .downloadToken(order.getDownloadToken())
+        .items(items)
+        .build();
   }
 }
