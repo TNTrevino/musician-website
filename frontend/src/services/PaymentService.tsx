@@ -1,25 +1,18 @@
-import { PaymentStatusResponseDTO } from "../dtos/dtos";
+import { OrderConfirmationDTO } from "../dtos/dtos";
 
 const baseUrl = import.meta.env.VITE_BACKEND_URL;
-const SESSION = "SEB_SESSION_ID";
 
 export const PaymentService = {
-  async checkStatus(): Promise<PaymentStatusResponseDTO> {
-    const sessionId = localStorage.getItem(SESSION);
-    console.log("Session ID:", sessionId);
+  async confirm(sessionId: string): Promise<OrderConfirmationDTO> {
     try {
-      const response = await fetch(`${baseUrl}/payment/status`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sessionId: sessionId }),
-      });
+      const response = await fetch(
+        `${baseUrl}/payment/confirm?session_id=${encodeURIComponent(sessionId)}`,
+      );
 
-      const responseData: PaymentStatusResponseDTO = await response.json();
+      const responseData: OrderConfirmationDTO = await response.json();
       return responseData;
     } catch (error) {
-      throw new Error(
-        `Something went wrong sending the email. Error5: ${error}`,
-      );
+      throw new Error(`Something went wrong confirming the payment: ${error}`);
     }
   },
 };
