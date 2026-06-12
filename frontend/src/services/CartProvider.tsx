@@ -8,20 +8,19 @@ interface CartServiceProps {
 }
 
 const baseUrl = import.meta.env.VITE_BACKEND_URL;
-const SESSION = "SEB_SESSION_ID";
 
 export const CartProvider: React.FC<CartServiceProps> = ({ children }) => {
   const [cartItems, setCartItems] = useState<CartItems[]>([]);
 
   const addToCart = (piece: CartItems): void => {
-    // TODO: once the SQL calls and the stripe gets situated, use productId
-    // instead. just in case
-    const isItemInCart = cartItems.find((item) => item.title == piece.title);
+    const isItemInCart = cartItems.find(
+      (item) => item.pieceId == piece.pieceId,
+    );
 
     if (isItemInCart) {
       setCartItems(
         cartItems.map((item) =>
-          item.title == piece.title
+          item.pieceId == piece.pieceId
             ? { ...item, quantity: item.quantity + 1 }
             : item,
         ),
@@ -29,20 +28,19 @@ export const CartProvider: React.FC<CartServiceProps> = ({ children }) => {
     } else {
       setCartItems([...cartItems, { ...piece, quantity: 1 }]);
     }
-    console.log(cartItems);
   };
 
   const removeFromCart = (piece: CartItems): void => {
-    // TODO: once the SQL calls and the stripe gets situated, use productId
-    // instead. just in case
-    const isItemInCart = cartItems.find((item) => item.title == piece.title);
+    const isItemInCart = cartItems.find(
+      (item) => item.pieceId == piece.pieceId,
+    );
 
     if (isItemInCart?.quantity == 1) {
-      setCartItems(cartItems.filter((item) => item.title != piece.title));
+      setCartItems(cartItems.filter((item) => item.pieceId != piece.pieceId));
     } else {
       setCartItems(
         cartItems.map((item) =>
-          item.title == piece.title
+          item.pieceId == piece.pieceId
             ? { ...item, quantity: item.quantity - 1 }
             : item,
         ),
@@ -51,7 +49,7 @@ export const CartProvider: React.FC<CartServiceProps> = ({ children }) => {
   };
 
   const removePieceFromCart = (piece: CartItems): void => {
-    setCartItems(cartItems.filter((item) => item.title != piece.title));
+    setCartItems(cartItems.filter((item) => item.pieceId != piece.pieceId));
   };
 
   const clearCart = (): void => {
@@ -71,13 +69,12 @@ export const CartProvider: React.FC<CartServiceProps> = ({ children }) => {
 
   const prepareCartItemsForCheckout = () => {
     return cartItems.map((item) => ({
-      id: item.productId,
+      id: item.pieceId,
       quantity: item.quantity,
     }));
   };
 
   const checkoutCart = async () => {
-    console.log(prepareCartItemsForCheckout());
     const paymentRequest: PaymentRequestDTO = {
       products: prepareCartItemsForCheckout(),
       currency: "USD",
@@ -90,7 +87,6 @@ export const CartProvider: React.FC<CartServiceProps> = ({ children }) => {
       body: JSON.stringify(paymentRequest),
     });
     const paymentResponse: PaymentResponseDTO = await response.json();
-    localStorage.setItem(SESSION, paymentResponse.sessionId);
     window.location.href = paymentResponse.checkoutUrl;
   };
 

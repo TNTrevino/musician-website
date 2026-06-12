@@ -60,7 +60,8 @@ export interface CartItems extends PieceDTO {
 
 export interface ProductDTO {
   quantity: number;
-  id: string;
+  // DB piece id, not a Stripe product id
+  id: number;
 }
 
 export interface LoginDTO {
