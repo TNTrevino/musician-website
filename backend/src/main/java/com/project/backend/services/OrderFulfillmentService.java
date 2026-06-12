@@ -30,6 +30,7 @@ public class OrderFulfillmentService {
 
   @Autowired OrderRepository orderRepository;
   @Autowired PiecesRepository piecesRepository;
+  @Autowired PurchaseEmailService purchaseEmailService;
 
   /**
    * Idempotent fulfillment entry point, called by both the Stripe webhook and the success-page
@@ -116,9 +117,14 @@ public class OrderFulfillmentService {
       return;
     }
 
-    // TODO(purchase-email): send the download-links email here; on failure call
-    // orderRepository.resetEmailSent(order.getId()) so a webhook retry can try again
-    logger.info("Claimed email send for order {}", order.getId());
+    try {
+      purchaseEmailService.sendDownloadEmail(order);
+    } catch (Exception ex) {
+      // release the claim so a webhook retry can attempt the send again;
+      // the buyer still gets their downloads on the success page either way
+      logger.error("Download email failed for order {}: {}", order.getId(), ex.getMessage(), ex);
+      orderRepository.resetEmailSent(order.getId());
+    }
   }
 
   private static String generateToken() {
