@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+import org.springframework.transaction.annotation.Transactional;
 
 public interface OrderRepository extends JpaRepository<Order, Long> {
 
@@ -15,6 +16,7 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
 
   // returns 1 only for the caller that claims the email send, so the
   // webhook and the success-page redirect can never both send it
+  @Transactional
   @Modifying
   @Query(
       """
@@ -24,6 +26,7 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
       """)
   int markEmailSent(@Param(value = "id") Long id);
 
+  @Transactional
   @Modifying
   @Query(
       """
@@ -33,6 +36,7 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
       """)
   int resetEmailSent(@Param(value = "id") Long id);
 
+  @Transactional
   @Modifying
   @Query(
       """
