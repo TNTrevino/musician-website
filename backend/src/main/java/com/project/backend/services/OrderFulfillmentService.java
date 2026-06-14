@@ -1,5 +1,6 @@
 package com.project.backend.services;
 
+import com.project.backend.exceptions.UnprocessableEventException;
 import com.project.backend.models.Order;
 import com.project.backend.models.OrderItem;
 import com.project.backend.models.OrderStatus;
@@ -84,7 +85,8 @@ public class OrderFulfillmentService {
   private Order createOrder(Session session) {
     if (!"paid".equals(session.getPaymentStatus())) {
       logger.warn("Refusing to fulfill unpaid session {}", session.getId());
-      throw new IllegalStateException("Session is not paid");
+      // Terminal: payment status will not change retroactively; retrying is pointless.
+      throw new UnprocessableEventException("Session is not paid: " + session.getId());
     }
 
     List<Piece> pieces = parsePieces(session);
@@ -131,15 +133,32 @@ public class OrderFulfillmentService {
         session.getMetadata() != null ? session.getMetadata().get("piece_ids") : null;
     if (pieceIds == null || pieceIds.isBlank()) {
       logger.error("Session {} has no piece_ids metadata", session.getId());
-      throw new IllegalStateException("Session has no piece_ids metadata");
+      // Terminal: metadata is set at checkout creation time and will not change on retry.
+      throw new UnprocessableEventException(
+          "Session " + session.getId() + " has no piece_ids metadata");
     }
 
-    List<Long> ids = Arrays.stream(pieceIds.split(",")).map(Long::parseLong).toList();
+    List<Long> ids;
+    try {
+      ids = Arrays.stream(pieceIds.split(",")).map(Long::parseLong).toList();
+    } catch (NumberFormatException ex) {
+      logger.error(
+          "Session {} has malformed piece_ids metadata '{}': {}",
+          session.getId(),
+          pieceIds,
+          ex.getMessage());
+      // Terminal: malformed metadata will never parse correctly on retry.
+      throw new UnprocessableEventException(
+          "Session " + session.getId() + " has malformed piece_ids metadata: " + pieceIds, ex);
+    }
+
     List<Piece> pieces = piecesRepository.findAllById(ids);
 
     if (pieces.size() != ids.size()) {
       logger.error("Session {} references pieces missing from the DB: {}", session.getId(), ids);
-      throw new IllegalStateException("Session references unknown pieces");
+      // Terminal: piece ids embedded in metadata will not change; missing pieces won't appear.
+      throw new UnprocessableEventException(
+          "Session " + session.getId() + " references unknown pieces: " + ids);
     }
 
     return pieces;

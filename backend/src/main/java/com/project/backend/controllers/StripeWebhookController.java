@@ -1,6 +1,7 @@
 package com.project.backend.controllers;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.project.backend.exceptions.UnprocessableEventException;
 import com.project.backend.models.Order;
 import com.project.backend.services.OrderFulfillmentService;
 import com.stripe.Stripe;
@@ -65,7 +66,20 @@ public class StripeWebhookController {
     Order order;
     try {
       order = fulfillmentService.fulfill(session);
+    } catch (UnprocessableEventException ex) {
+      // Intentional acknowledgement of a permanently-unprocessable event. Returning 200
+      // tells Stripe not to retry — retrying would never succeed (e.g. missing/malformed
+      // piece_ids metadata, unknown piece ids, or an unpaid session) and repeated 5xx
+      // responses would cause Stripe to disable the webhook endpoint after ~3 days.
+      logger.warn(
+          "Unprocessable webhook event {} for session {}: {}",
+          event.getId(),
+          session.getId(),
+          ex.getMessage());
+      return ResponseEntity.ok("Acknowledged: " + ex.getMessage());
     } catch (Exception ex) {
+      // Transient failure (DB down, Stripe API error, IO, etc.) — return non-2xx so
+      // Stripe retries the event later.
       logger.error("Fulfillment failed for session {}: {}", session.getId(), ex.getMessage(), ex);
       return ResponseEntity.internalServerError().body("Fulfillment failed");
     }
