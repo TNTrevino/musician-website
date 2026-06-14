@@ -25,7 +25,6 @@ export interface PieceDTO {
   difficultyGrade: number;
   timeLength: number; // this might be wrong
   description: string;
-  productId: string;
 }
 
 export interface DownloadItemDTO {
@@ -62,7 +61,6 @@ export interface EmailResponseDTO {
 
 export interface CartItems extends PieceDTO {
   quantity: number;
-  productId: string;
 }
 
 export interface ProductDTO {
