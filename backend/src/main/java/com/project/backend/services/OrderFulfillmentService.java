@@ -19,6 +19,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class OrderFulfillmentService {
@@ -33,18 +34,51 @@ public class OrderFulfillmentService {
   @Autowired PurchaseEmailService purchaseEmailService;
 
   /**
-   * Idempotent fulfillment entry point, called by both the Stripe webhook and the success-page
-   * confirm endpoint. Whichever arrives first creates the order; the unique constraint on
-   * stripe_session_id settles a concurrent race.
+   * Idempotent fulfillment: finds an existing order or creates one, then ensures the lazy
+   * {@code items} collection is initialized before the transaction closes. Called by both the
+   * Stripe webhook and the success-page confirm endpoint; the unique constraint on
+   * stripe_session_id settles any concurrent race.
+   *
+   * <p>This method is {@code @Transactional} so the find-or-create and the lazy {@code getItems()}
+   * read happen inside a single persistence session. Email send MUST happen after this transaction
+   * commits — callers should invoke {@link #sendEmailIfNeeded} on the returned Order outside this
+   * transactional boundary. Because callers call this method through the Spring bean proxy,
+   * {@code @Transactional} is fully honored (no self-invocation bypass).
    */
+  @Transactional
   public Order fulfill(Session session) {
     Order order =
         orderRepository
             .findByStripeSessionId(session.getId())
             .orElseGet(() -> createOrder(session));
 
-    sendEmailIfNeeded(order);
+    // Touch the lazy collection inside the transaction so items are initialized
+    // and available on the returned (possibly detached) object after commit.
+    order.getItems().size();
+
     return order;
+  }
+
+  /**
+   * Claims and sends the download email if it has not already been sent. The atomic
+   * {@code markEmailSent} guard ensures exactly one caller wins the claim, even under the
+   * concurrent webhook-vs-redirect race. This method intentionally runs OUTSIDE any open
+   * transaction so a slow SMTP server never holds a DB connection open.
+   */
+  public void sendEmailIfNeeded(Order order) {
+    // the atomic markEmailSent guard means only one caller can claim the send
+    if (orderRepository.markEmailSent(order.getId()) != 1) {
+      return;
+    }
+
+    try {
+      purchaseEmailService.sendDownloadEmail(order);
+    } catch (Exception ex) {
+      // release the claim so a webhook retry can attempt the send again;
+      // the buyer still gets their downloads on the success page either way
+      logger.error("Download email failed for order {}: {}", order.getId(), ex.getMessage(), ex);
+      orderRepository.resetEmailSent(order.getId());
+    }
   }
 
   private Order createOrder(Session session) {
@@ -109,22 +143,6 @@ public class OrderFulfillmentService {
     }
 
     return pieces;
-  }
-
-  private void sendEmailIfNeeded(Order order) {
-    // the atomic markEmailSent guard means only one caller can claim the send
-    if (orderRepository.markEmailSent(order.getId()) != 1) {
-      return;
-    }
-
-    try {
-      purchaseEmailService.sendDownloadEmail(order);
-    } catch (Exception ex) {
-      // release the claim so a webhook retry can attempt the send again;
-      // the buyer still gets their downloads on the success page either way
-      logger.error("Download email failed for order {}: {}", order.getId(), ex.getMessage(), ex);
-      orderRepository.resetEmailSent(order.getId());
-    }
   }
 
   private static String generateToken() {

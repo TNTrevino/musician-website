@@ -1,6 +1,7 @@
 package com.project.backend.controllers;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.project.backend.models.Order;
 import com.project.backend.services.OrderFulfillmentService;
 import com.stripe.Stripe;
 import com.stripe.exception.SignatureVerificationException;
@@ -61,12 +62,18 @@ public class StripeWebhookController {
     }
 
     logger.info("Webhook received checkout.session.completed for session {}", session.getId());
+    Order order;
     try {
-      fulfillmentService.fulfill(session);
+      order = fulfillmentService.fulfill(session);
     } catch (Exception ex) {
       logger.error("Fulfillment failed for session {}: {}", session.getId(), ex.getMessage(), ex);
       return ResponseEntity.internalServerError().body("Fulfillment failed");
     }
+
+    // Email send runs outside the fulfill() transaction so a slow SMTP server
+    // never holds a DB connection open. The markEmailSent atomic guard inside
+    // sendEmailIfNeeded ensures only one caller (webhook or success-page) sends it.
+    fulfillmentService.sendEmailIfNeeded(order);
 
     return ResponseEntity.ok("Fulfilled");
   }

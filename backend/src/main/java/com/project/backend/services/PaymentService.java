@@ -144,6 +144,11 @@ public class PaymentService {
 
     Order order = fulfillmentService.fulfill(session);
 
+    // Email send runs outside the fulfill() transaction so a slow SMTP server
+    // never holds a DB connection open. The markEmailSent atomic guard inside
+    // sendEmailIfNeeded ensures only one caller (webhook or success-page) sends it.
+    fulfillmentService.sendEmailIfNeeded(order);
+
     List<DownloadItemDTO> items =
         order.getItems().stream()
             .map(OrderItem::getPiece)
