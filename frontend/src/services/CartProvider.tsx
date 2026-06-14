@@ -17,35 +17,13 @@ export const CartProvider: React.FC<CartServiceProps> = ({ children }) => {
       (item) => item.pieceId == piece.pieceId,
     );
 
-    if (isItemInCart) {
-      setCartItems(
-        cartItems.map((item) =>
-          item.pieceId == piece.pieceId
-            ? { ...item, quantity: item.quantity + 1 }
-            : item,
-        ),
-      );
-    } else {
+    if (!isItemInCart) {
       setCartItems([...cartItems, { ...piece, quantity: 1 }]);
     }
   };
 
   const removeFromCart = (piece: CartItems): void => {
-    const isItemInCart = cartItems.find(
-      (item) => item.pieceId == piece.pieceId,
-    );
-
-    if (isItemInCart?.quantity == 1) {
-      setCartItems(cartItems.filter((item) => item.pieceId != piece.pieceId));
-    } else {
-      setCartItems(
-        cartItems.map((item) =>
-          item.pieceId == piece.pieceId
-            ? { ...item, quantity: item.quantity - 1 }
-            : item,
-        ),
-      );
-    }
+    setCartItems(cartItems.filter((item) => item.pieceId != piece.pieceId));
   };
 
   const removePieceFromCart = (piece: CartItems): void => {
@@ -57,20 +35,17 @@ export const CartProvider: React.FC<CartServiceProps> = ({ children }) => {
   };
 
   const getCartSubtotal = (): number => {
-    return cartItems.reduce(
-      (total, item) => total + item.price * item.quantity,
-      0,
-    );
+    return cartItems.reduce((total, item) => total + item.price, 0);
   };
 
   const getTotalItems = (): number => {
-    return cartItems.reduce((total, item) => total + item.quantity, 0);
+    return cartItems.length;
   };
 
   const prepareCartItemsForCheckout = () => {
     return cartItems.map((item) => ({
       id: item.pieceId,
-      quantity: item.quantity,
+      quantity: 1,
     }));
   };
 

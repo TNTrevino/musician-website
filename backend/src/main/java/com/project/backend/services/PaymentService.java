@@ -80,7 +80,7 @@ public class PaymentService {
 
               SessionCreateParams.LineItem lineItem =
                   SessionCreateParams.LineItem.builder()
-                      .setQuantity(dto.getQuantity())
+                      .setQuantity(1L)
                       .setPriceData(priceData)
                       .build();
 
