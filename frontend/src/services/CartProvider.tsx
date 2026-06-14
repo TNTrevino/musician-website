@@ -8,50 +8,26 @@ interface CartServiceProps {
 }
 
 const baseUrl = import.meta.env.VITE_BACKEND_URL;
-const SESSION = "SEB_SESSION_ID";
 
 export const CartProvider: React.FC<CartServiceProps> = ({ children }) => {
   const [cartItems, setCartItems] = useState<CartItems[]>([]);
 
   const addToCart = (piece: CartItems): void => {
-    // TODO: once the SQL calls and the stripe gets situated, use productId
-    // instead. just in case
-    const isItemInCart = cartItems.find((item) => item.title == piece.title);
+    const isItemInCart = cartItems.find(
+      (item) => item.pieceId == piece.pieceId,
+    );
 
-    if (isItemInCart) {
-      setCartItems(
-        cartItems.map((item) =>
-          item.title == piece.title
-            ? { ...item, quantity: item.quantity + 1 }
-            : item,
-        ),
-      );
-    } else {
+    if (!isItemInCart) {
       setCartItems([...cartItems, { ...piece, quantity: 1 }]);
     }
-    console.log(cartItems);
   };
 
   const removeFromCart = (piece: CartItems): void => {
-    // TODO: once the SQL calls and the stripe gets situated, use productId
-    // instead. just in case
-    const isItemInCart = cartItems.find((item) => item.title == piece.title);
-
-    if (isItemInCart?.quantity == 1) {
-      setCartItems(cartItems.filter((item) => item.title != piece.title));
-    } else {
-      setCartItems(
-        cartItems.map((item) =>
-          item.title == piece.title
-            ? { ...item, quantity: item.quantity - 1 }
-            : item,
-        ),
-      );
-    }
+    setCartItems(cartItems.filter((item) => item.pieceId != piece.pieceId));
   };
 
   const removePieceFromCart = (piece: CartItems): void => {
-    setCartItems(cartItems.filter((item) => item.title != piece.title));
+    setCartItems(cartItems.filter((item) => item.pieceId != piece.pieceId));
   };
 
   const clearCart = (): void => {
@@ -59,25 +35,21 @@ export const CartProvider: React.FC<CartServiceProps> = ({ children }) => {
   };
 
   const getCartSubtotal = (): number => {
-    return cartItems.reduce(
-      (total, item) => total + item.price * item.quantity,
-      0,
-    );
+    return cartItems.reduce((total, item) => total + item.price, 0);
   };
 
   const getTotalItems = (): number => {
-    return cartItems.reduce((total, item) => total + item.quantity, 0);
+    return cartItems.length;
   };
 
   const prepareCartItemsForCheckout = () => {
     return cartItems.map((item) => ({
-      id: item.productId,
-      quantity: item.quantity,
+      id: item.pieceId,
+      quantity: 1,
     }));
   };
 
   const checkoutCart = async () => {
-    console.log(prepareCartItemsForCheckout());
     const paymentRequest: PaymentRequestDTO = {
       products: prepareCartItemsForCheckout(),
       currency: "USD",
@@ -90,7 +62,6 @@ export const CartProvider: React.FC<CartServiceProps> = ({ children }) => {
       body: JSON.stringify(paymentRequest),
     });
     const paymentResponse: PaymentResponseDTO = await response.json();
-    localStorage.setItem(SESSION, paymentResponse.sessionId);
     window.location.href = paymentResponse.checkoutUrl;
   };
 

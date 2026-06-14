@@ -7,12 +7,10 @@ import { Link } from "react-router-dom";
 const CartSection = () => {
   const {
     cartItems,
-    addToCart,
     removeFromCart,
     clearCart,
     getCartSubtotal,
     getTotalItems,
-    removePieceFromCart,
     checkoutCart,
   } = useCartContext();
 
@@ -67,26 +65,9 @@ const CartSection = () => {
                   </div>
 
                   <div className="flex flex-row items-center gap-3 md:gap-4 mt-3 sm:mt-0">
-                    <div className="flex flex-row items-center border border-gray-700 rounded-lg w-fit">
-                      <button
-                        onClick={() => removeFromCart(item)}
-                        className="px-3 py-2 md:py-1 text-primary hover:bg-gray-900 active:bg-gray-800"
-                      >
-                        -
-                      </button>
-                      <span className="px-3 py-2 md:py-1 border-x border-gray-700">
-                        {item.quantity}
-                      </span>
-                      <button
-                        onClick={() => addToCart(item)}
-                        className="px-3 py-2 md:py-1 text-primary hover:bg-gray-900 active:bg-gray-800"
-                      >
-                        +
-                      </button>
-                    </div>
                     <button
                       onClick={() => {
-                        removePieceFromCart(item);
+                        removeFromCart(item);
                       }}
                       className="text-primary cursor-pointer hover:text-white p-3 active:scale-95 transition-transform rounded-lg min-w-[44px] min-h-[44px] flex items-center justify-center"
                       aria-label="Remove item from cart"
@@ -101,18 +82,9 @@ const CartSection = () => {
                     Item {index + 1}
                   </p>
                   <p className="text-lg md:text-xl font-semibold">
-                    ${(item.price * item.quantity).toFixed(2)}
+                    ${item.price.toFixed(2)}
                   </p>
                 </div>
-                <button
-                  onClick={() => {
-                    clearCart();
-                  }}
-                  className="hidden sm:flex text-primary cursor-pointer hover:text-white p-3 active:scale-95 transition-transform rounded-lg min-w-[44px] min-h-[44px] items-center justify-center"
-                  aria-label="Clear entire cart"
-                >
-                  <IconTrash size={20} />
-                </button>
               </div>
             ))}
           </div>

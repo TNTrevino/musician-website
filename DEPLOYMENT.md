@@ -87,37 +87,88 @@ Each environment has its own `.env` file at `/opt/sebastian/{env}/.env`. See `.e
 
 | Variable | Description |
 |---|---|
-| `DATABASE_URL` | PostgreSQL JDBC connection string |
-| `DATABASE_USER` | Database username |
-| `DATABASE_PW` | Database password |
-| `DEFAULT_SCHEMA` | PostgreSQL schema name |
+| `DATABASE_URL` | Native Postgres URL for sqlx-cli/psql (may embed credentials) |
+| `APP_DATABASE_URL` | Native Postgres URL for the app (no credentials; it prepends `jdbc:`) |
+| `DATABASE_USER` | Database username (used by the app) |
+| `DATABASE_PW` | Database password (used by the app) |
+| `DEFAULT_SCHEMA` | PostgreSQL schema name (fixed: `sebas`) |
 | `BACKEND_PORT` | API server port (38741 prod, 38742 qa) |
 | `EMAIL_USER` | SMTP username (Gmail) |
 | `EMAIL_PW` | SMTP app password |
 | `FRONTEND_URL` | Public frontend URL |
 | `JWT_SECRET` | JWT signing key |
-| `STRIPE_PUBLISHABLE` | Stripe publishable key |
 | `STRIPE_SECRET` | Stripe secret key |
+| `STRIPE_WEBHOOK_SECRET` | Signing secret (`whsec_...`) of the Stripe webhook endpoint |
+| `PIECE_FILES_DIR` | Directory holding the sheet music PDFs (default `/var/lib/sebastian/files`) |
+| `DOWNLOAD_TOKEN_TTL_DAYS` | Optional: days a download link stays valid (default 30) |
 | `VITE_BACKEND_URL` | Backend URL used by frontend build |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | OpenTelemetry collector endpoint |
 | `OTEL_EXPORTER_OTLP_PROTOCOL` | OTLP protocol (`grpc`) |
 | `OTEL_LOGS_EXPORTER` | Logs exporter config |
 
-QA should use Stripe **test** keys, a separate database/schema, and its own JWT secret.
+Each environment is its **own database** (all using the same fixed schema,
+`sebas`). QA should use Stripe **test** keys, its own database, and its own JWT
+secret.
 
 ## Setting Up a New Environment
 
 1. Clone the repo to `/opt/sebastian/{env}`
 2. Copy `.env.example` to `.env` and fill in values
-3. Create the systemd service file (use prod as a template, change paths and description)
-4. Enable the service: `sudo systemctl enable sebastian-api-{env}`
-5. Add the sudoers entry for the new service
-6. Build and start:
+3. Provision the database: create an empty database, then apply migrations from
+   the repo root with `sqlx migrate run --database-url "$DATABASE_URL"` (the
+   migrations self-create the `sebas` schema — see `migrations/README.md`). Seed
+   afterward with `backend/sql/seed_prod.sql` (prod) or `seed_dev.sql` (qa/dev)
+   — never the dev seed on prod.
+4. Create the systemd service file (use prod as a template, change paths and description)
+5. Enable the service: `sudo systemctl enable sebastian-api-{env}`
+6. Add the sudoers entry for the new service
+7. Build and start:
    ```bash
    cd /opt/sebastian/{env}/frontend && npm ci && npm run build
    cd /opt/sebastian/{env}/backend && ./gradlew bootJar
    sudo systemctl start sebastian-api-{env}
    ```
+
+## Sheet Music Fulfillment
+
+Purchases are fulfilled automatically: the Stripe webhook (or the success-page
+redirect, whichever lands first) creates an `orders` row, emails the buyer a
+download link, and the buyer downloads PDFs through tokenized endpoints.
+
+### PDF storage
+
+PDFs live **outside the repo checkout** (deploys run `git reset --hard`) in
+`PIECE_FILES_DIR`:
+
+```bash
+sudo mkdir -p /var/lib/sebastian/files
+sudo chown noetrevino:noetrevino /var/lib/sebastian/files
+sudo chmod 750 /var/lib/sebastian/files
+```
+
+> **Back this directory up** along with the database — losing it breaks every
+> outstanding download link.
+
+### Adding a new piece for sale
+
+1. Copy the PDF to the Pi: `scp piece.pdf pi:/var/lib/sebastian/files/`
+2. Point the piece at it: `UPDATE piece SET file_name = 'piece.pdf' WHERE id = <id>;`
+
+Pieces without a `file_name` are rejected at checkout, so set the file before
+expecting sales.
+
+### Stripe webhook
+
+Register the endpoint in the Stripe Dashboard (Developers → Webhooks):
+
+- URL: `https://<public-backend-host>/payment/webhook`
+- Events: `checkout.session.completed` only
+- Copy the endpoint's `whsec_...` signing secret into `STRIPE_WEBHOOK_SECRET`
+
+The droplet reverse proxy must route `/payment/webhook` to the Pi backend the
+same way it routes the rest of the API. QA uses its own webhook endpoint with
+test-mode keys (`stripe listen --forward-to localhost:38742/payment/webhook`
+works for local testing).
 
 ## Health Check
 

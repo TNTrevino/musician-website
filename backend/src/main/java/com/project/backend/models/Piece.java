@@ -69,8 +69,9 @@ public class Piece {
   @Column(name = "time_length")
   private Duration timeLength;
 
-  @Column(name = "productid")
-  private String productId;
+  // bare file name inside PIECE_FILES_DIR, never a path
+  @Column(name = "file_name")
+  private String fileName;
 
   public Piece(String title, String composer, Double price, String description, Integer yearComposed,
       boolean hasElectronics, boolean completed, Integer numOfPlayers, Integer difficultyGrade, Duration timeLength) {

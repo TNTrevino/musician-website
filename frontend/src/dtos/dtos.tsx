@@ -25,19 +25,25 @@ export interface PieceDTO {
   difficultyGrade: number;
   timeLength: number; // this might be wrong
   description: string;
-  productId: string;
 }
 
-export interface CreateUpdateOrderDTO {
-  price: number;
-  userId: number;
-  piecesIds: number[];
+export interface DownloadItemDTO {
+  pieceId: number;
+  title: string;
+  composer: string;
 }
 
-export interface OrderDTO {
-  orderId: number;
-  price: number;
-  pieces: PieceDTO[];
+export interface OrderConfirmationDTO {
+  status: string;
+  buyerEmail: string;
+  downloadToken: string;
+  items: DownloadItemDTO[];
+}
+
+export interface DownloadManifestDTO {
+  items: DownloadItemDTO[];
+  expiresAt: string;
+  remainingDownloads: number;
 }
 
 export interface ContactDTO {
@@ -55,12 +61,12 @@ export interface EmailResponseDTO {
 
 export interface CartItems extends PieceDTO {
   quantity: number;
-  productId: string;
 }
 
 export interface ProductDTO {
   quantity: number;
-  id: string;
+  // DB piece id, not a Stripe product id
+  id: number;
 }
 
 export interface LoginDTO {
@@ -94,8 +100,3 @@ export interface PaymentResponseDTO {
   checkoutUrl: string;
 }
 
-export interface PaymentStatusResponseDTO {
-  status: string;
-  message: string;
-  sessionId: string;
-}

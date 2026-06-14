@@ -31,7 +31,7 @@ Java
 ``` bash
 #!/bin/bash
 #Database variables
-export DATABASE_URL="jdbc:postgresql://<port>/<database-name>"
+export DATABASE_URL="postgresql://<host>:<port>/<database-name>"  # native url; app prepends jdbc:
 export DATABASE_USER="<database_user>"
 export DATABASE_PW="<database_pw>"
 
@@ -39,10 +39,13 @@ export DATABASE_PW="<database_pw>"
 export EMAIL_USER="<your gmail>"
 export EMAIL_PW="<gmail app password>"
 
-#Stripe Variables
+#Stripe Variables (use sk_test_ keys locally, see DEVELOPMENT.md)
 export STRIPE_SECRET="<secret key>"
-export STRIPE_PUBLISHABLE="<publishable key>"
+export STRIPE_WEBHOOK_SECRET="<whsec from stripe listen>"
 export VITE_BACKEND_URL="<backend w port>"
+
+#Fulfillment
+export PIECE_FILES_DIR="$HOME/sebastian-files"
 
 BACKEND_PORT=8081
 
@@ -57,8 +60,11 @@ echo "email user: $EMAIL_USER"
 echo "email pass: $EMAIL_PW"
 
 echo "stripe secret: $STRIPE_SECRET"
-echo "stripe publishable: $STRIPE_PUBLISHABLE"
 ```
+
+See [DEVELOPMENT.md](DEVELOPMENT.md) for the full local setup, including
+Stripe test mode, webhooks via the Stripe CLI, and testing purchases
+end-to-end.
 2. Run it with this command:
   ``` bash
   source ./env.sh
