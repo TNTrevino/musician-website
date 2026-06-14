@@ -16,5 +16,4 @@ public class PieceDTO {
   private Integer difficultyGrade;
   private Duration timeLength;
   private boolean completed;
-  private String productId;
 }

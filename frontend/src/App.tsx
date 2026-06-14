@@ -13,6 +13,7 @@ import ContactSection from "./components/ContactSection";
 import About from "./pages/about/About";
 import Success from "./pages/payment/Success";
 import Cancel from "./pages/payment/Cancel";
+import Downloads from "./pages/payment/Downloads";
 import Login from "./pages/login/Login";
 import Signup from "./pages/login/Signup";
 
@@ -42,6 +43,7 @@ function App() {
           <Route path="/signup" element={<Signup />} />
           <Route path="/success" element={<Success />} />
           <Route path="/cancel" element={<Cancel />} />
+          <Route path="/downloads/:token" element={<Downloads />} />
           <Route path="*" element={<ErrorPage />} />
           {pieces.map((piece) => (
             <Route
